@@ -10,9 +10,9 @@
 
 | 平台 | 文件 | 使用方法 |
 | --- | --- | --- |
-| Windows 免安装 | `MultiScreenRecorder-0.2.1-windows-x64.exe` | 下载后双击运行。首次启动会解压内置组件，需要稍等几秒。 |
-| Windows 安装版 | `MultiScreenRecorder-0.2.1-windows-x64-Setup.exe` | 安装到当前用户目录，通过开始菜单启动，可正常卸载。 |
-| Linux 便携版 | `MultiScreenRecorder-0.2.1-linux-x64.tar.gz` | 解压，运行其中的 `MultiScreenRecorder`；需要 Ubuntu 22.04+ 或兼容系统的 X11 桌面。 |
+| Windows 免安装 | [直接运行的 EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-windows-x64.exe) | 下载后双击运行。首次启动会解压内置组件，需要稍等几秒。 |
+| Windows 安装版 | [Setup EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-windows-x64-Setup.exe) | 安装到当前用户目录，通过开始菜单启动，可正常卸载。 |
+| Linux 便携版 | [tar.gz 解压包](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-linux-x64.tar.gz) | 解压，运行其中的 `MultiScreenRecorder`；需要 Ubuntu 22.04+ 或兼容系统的 X11 桌面。 |
 
 下载包已包含 Python、Qt、scrcpy、adb、FFmpeg、ffprobe 和中文字体，无需另外安装这些工具。Windows 包目前未做代码签名。各文件可使用随附的 `SHA256SUMS` 校验。
 
