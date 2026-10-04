@@ -1,0 +1,30 @@
+test_adb_statuses_and_error_are_visible (test_dual_scrcpy.RegressionTests.test_adb_statuses_and_error_are_visible) ... ok
+test_force_stop_warns_recording_may_be_incomplete (test_dual_scrcpy.RegressionTests.test_force_stop_warns_recording_may_be_incomplete) ... ok
+test_frozen_resource_roots (test_dual_scrcpy.RegressionTests.test_frozen_resource_roots) ... ok
+test_invalid_record_directory_recovers_without_starting (test_dual_scrcpy.RegressionTests.test_invalid_record_directory_recovers_without_starting) ... ok
+test_invalid_settings_cannot_be_accepted_or_mutate_config (test_dual_scrcpy.RegressionTests.test_invalid_settings_cannot_be_accepted_or_mutate_config) ... ok
+test_native_embedding_click_refresh_and_async_stop (test_dual_scrcpy.RegressionTests.test_native_embedding_click_refresh_and_async_stop) ... ok
+test_nonzero_shutdown_is_reported_as_failure (test_dual_scrcpy.RegressionTests.test_nonzero_shutdown_is_reported_as_failure) ... ok
+test_one_device_start_all_only_starts_a (test_dual_scrcpy.RegressionTests.test_one_device_start_all_only_starts_a) ... ok
+test_portable_flat_and_nested_tools_without_path (test_dual_scrcpy.RegressionTests.test_portable_flat_and_nested_tools_without_path) ... ok
+test_refresh_preserves_swapped_selection (test_dual_scrcpy.RegressionTests.test_refresh_preserves_swapped_selection) ... ok
+test_scrcpy_sdl_window_accepts_graceful_close_after_embedding (test_dual_scrcpy.RegressionTests.test_scrcpy_sdl_window_accepts_graceful_close_after_embedding) ... ok
+test_settings_and_manual_tools_survive_restart (test_dual_scrcpy.RegressionTests.test_settings_and_manual_tools_survive_restart) ... ok
+test_stderr_is_drained_before_a_window_exists (test_dual_scrcpy.RegressionTests.test_stderr_is_drained_before_a_window_exists) ... ok
+test_stop_all_and_close_window_finalize_mp4 (test_dual_scrcpy.RegressionTests.test_stop_all_and_close_window_finalize_mp4) ... ok
+test_wifi_recording_is_a_regular_unique_file (test_dual_scrcpy.RegressionTests.test_wifi_recording_is_a_regular_unique_file) ... ok
+test_audio_options_are_playback_not_device_mic (test_recording.RecordingTests.test_audio_options_are_playback_not_device_mic) ... ok
+test_capture_disconnect_reports_failure_and_keeps_recoverable_segments (test_recording.RecordingTests.test_capture_disconnect_reports_failure_and_keeps_recoverable_segments) ... ok
+test_headless_pause_resume_background_and_mp4_finalization (test_recording.RecordingTests.test_headless_pause_resume_background_and_mp4_finalization) ... ok
+test_missing_device_audio_is_reported_and_export_failure_retains_inputs (test_recording.RecordingTests.test_missing_device_audio_is_reported_and_export_failure_retains_inputs) ... ok
+test_one_two_three_sources_modes_and_audio_switches (test_recording.RecordingTests.test_one_two_three_sources_modes_and_audio_switches) ... ok
+test_pause_segments_join_and_narration_mixed_once (test_recording.RecordingTests.test_pause_segments_join_and_narration_mixed_once) ... ok
+test_preparation_cancel_does_not_launch_capture (test_recording.RecordingTests.test_preparation_cancel_does_not_launch_capture) ... ok
+test_silent_combined_video_and_rotation_metadata (test_recording.RecordingTests.test_silent_combined_video_and_rotation_metadata) ... ok
+test_three_headless_devices_and_synthetic_microphone_finish_on_exit (test_recording.RecordingTests.test_three_headless_devices_and_synthetic_microphone_finish_on_exit) ... ok
+test_ui_device_count_and_recording_source_selection (test_recording.RecordingTests.test_ui_device_count_and_recording_source_selection) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 46.263s
+
+OK
