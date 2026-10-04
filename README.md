@@ -2,7 +2,29 @@
 
 多屏录制是一款支持 1～3 台 Android 设备的桌面镜像与录屏软件，可在同一窗口预览并操控手机、Android 眼镜等设备。支持独立开始、暂停、继续和结束录制，窗口隐藏后仍可在后台采集；设备播放声音与电脑麦克风讲解可按需选择。视频既可分别保存，也可合成为带自定义标题、设备名称和布局的 MP4，适用于产品演示、操作培训和多设备流程记录。
 
-当前版本：**0.2.0**。主要支持 Windows 10/11。
+当前版本：**0.2.1**。支持 Windows 10/11 和 Linux x86_64（X11）。
+
+## 下载
+
+可执行包在 [GitHub Releases](https://github.com/holdonyb/scrcpy-dual-viewer/releases) 提供：
+
+| 平台 | 文件 | 使用方法 |
+| --- | --- | --- |
+| Windows 免安装 | `MultiScreenRecorder-0.2.1-windows-x64.exe` | 下载后双击运行。首次启动会解压内置组件，需要稍等几秒。 |
+| Windows 安装版 | `MultiScreenRecorder-0.2.1-windows-x64-Setup.exe` | 安装到当前用户目录，通过开始菜单启动，可正常卸载。 |
+| Linux 便携版 | `MultiScreenRecorder-0.2.1-linux-x64.tar.gz` | 解压，运行其中的 `MultiScreenRecorder`；需要 Ubuntu 22.04+ 或兼容系统的 X11 桌面。 |
+
+下载包已包含 Python、Qt、scrcpy、adb、FFmpeg、ffprobe 和中文字体，无需另外安装这些工具。Windows 包目前未做代码签名。各文件可使用随附的 `SHA256SUMS` 校验。
+
+设备仍需开启 USB 调试，并在手机或眼镜上授权。Windows 某些设备需安装厂商 USB 驱动。Linux 用户需有 USB 访问权限；Ubuntu 可安装 `android-sdk-platform-tools-common` 提供 udev 规则，添加至 `plugdev` 组后重新登录并重连设备。具体步骤见 [scrcpy Linux 说明](https://github.com/Genymobile/scrcpy/blob/v4.1/doc/linux.md)。
+
+Linux 使用示例：
+
+```bash
+tar -xzf MultiScreenRecorder-0.2.1-linux-x64.tar.gz
+cd MultiScreenRecorder
+./MultiScreenRecorder
+```
 
 ## 功能
 
@@ -64,21 +86,21 @@ python -m venv .venv
 ## 平台和限制
 
 - Windows 10/11 支持镜像、独立录屏、电脑麦克风和托盘后台录制。
-- Linux 镜像需要 X11；Wayland 不支持跨进程窗口嵌入。电脑麦克风当前仅支持 Windows。Linux 分支尚未实测。
+- Linux 镜像需要 X11；请在登录时选择 Xorg 会话。Wayland 不支持跨进程窗口嵌入。电脑麦克风当前仅支持 Windows；Linux 支持设备播放声音。
 - 多设备由独立进程采集，暂停片段会按时长对齐，但不保证帧级同步。镜像和录屏同时运行会增加设备编码负荷，部分固件可能限制并发编码器。
 - Qt 嵌入外部窗口后，部分场景的键盘输入受焦点限制；鼠标点击和滑动可用。
 - 后台指窗口隐藏或最小化；电脑休眠、设备断连会影响采集。
 
-## 打包 Windows exe
+## 从源码构建下载包
 
-将 scrcpy 便携包放在仓库 `scrcpy/`，FFmpeg/ffprobe 放在 `ffmpeg/bin/` 后：
+在目标操作系统使用 Python 3.11 安装 `packaging/requirements-build.txt`，再运行：
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install pyinstaller
-.\.venv\Scripts\python.exe -m PyInstaller --noconfirm --onedir --windowed --name multiscreen_recorder --add-data 'scrcpy;scrcpy' --add-data 'ffmpeg;ffmpeg' dual_scrcpy_qt.py
+```bash
+python packaging/prepare_tools.py
+python packaging/build_release.py
 ```
 
-分发整个 `dist/multiscreen_recorder/` 文件夹。目标电脑仍需设备驱动和 USB 调试授权。当前未完成 exe 打包验收。
+脚本校验固定版本依赖的 SHA-256，输出到 `dist/release/`。Windows 还需 Inno Setup 6，生成单文件 EXE 和安装包；Linux 生成可解压运行的完整目录包。GitHub Actions 的 `Build downloadable releases` 可分别构建两个平台，并检查源码、实际下载包、Windows 安装与卸载。第三方组件的授权和源代码信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 验证与效果
 

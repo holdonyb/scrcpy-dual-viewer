@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 )
 from recording_ui import RecordingPanel
 from recording_capture import signal_private_console, find_media_tools
+from app_runtime import VERSION, external_environment, initialize_desktop
 
 # ---------------------------------------------------------------------------
 # adb / scrcpy 查找
@@ -92,7 +93,7 @@ class ScrcpyFinder:
     @staticmethod
     def find() -> Optional[str]:
         exe = shutil.which("scrcpy") or shutil.which("scrcpy.exe")
-        if exe:
+        if exe and not getattr(sys, "frozen", False):
             return exe
 
         bundled = []
@@ -113,7 +114,7 @@ class ScrcpyFinder:
         for p in candidates:
             if p.is_file():
                 return str(p)
-        return None
+        return exe
 
 
 def find_adb(scrcpy_path: Optional[str] = None) -> Optional[str]:
@@ -145,7 +146,7 @@ class AdbHelper:
         kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
         result = subprocess.run(
             [self.adb_path, "devices", "-l"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=10, env=external_environment(),
             encoding="utf-8", errors="replace",
             **kwargs,
         )
@@ -420,7 +421,7 @@ class ScrcpySession(QObject):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
-                env=env,
+                env=external_environment(env),
                 **kwargs,
             )
         except Exception as e:
@@ -1031,7 +1032,7 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.log_dock.toggleViewAction())
         help_menu = self.menuBar().addMenu("帮助")
         help_menu.addAction("关于多屏录制", lambda: QMessageBox.about(
-            self, "关于多屏录制", "<b>多屏录制</b><br>版本 0.2.0<br><br>连接 Android 设备，预览与录制屏幕。"
+            self, "关于多屏录制", f"<b>多屏录制</b><br>版本 {VERSION}<br><br>连接 Android 设备，预览与录制屏幕。"
             "<br>支持设备播放声音、电脑讲解，以及分别和合成保存。"))
 
         for p in self.panels:
@@ -1201,6 +1202,12 @@ class MainWindow(QMainWindow):
 def main():
     if "--signal-recording" in sys.argv:
         sys.exit(signal_private_console(int(sys.argv[sys.argv.index("--signal-recording") + 1])))
+    if "--self-test" in sys.argv:
+        from release_smoke import self_test
+        sys.exit(self_test(Path(sys.argv[sys.argv.index("--self-test") + 1])))
+    if "--test-window" in sys.argv:
+        from release_smoke import window_child
+        sys.exit(window_child(sys.argv[sys.argv.index("--test-window") + 1:]))
     if "--check" in sys.argv:
         print(f"adb:    {AdbHelper().adb_path or 'NOT FOUND'}")
         print(f"scrcpy: {ScrcpyFinder.find() or 'NOT FOUND'}")
@@ -1208,7 +1215,8 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("多屏录制")
-    app.setApplicationVersion("0.2.0")
+    app.setApplicationVersion(VERSION)
+    initialize_desktop(app)
     app.setStyle("Fusion")
     app.setStyleSheet(DARK_QSS)
 

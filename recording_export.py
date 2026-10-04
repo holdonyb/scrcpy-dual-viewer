@@ -4,12 +4,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from app_runtime import bundle_root, external_environment
 
 
 def media_info(ffprobe, path):
     kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
     result = subprocess.run([ffprobe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
-                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, **kwargs)
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                            env=external_environment(), **kwargs)
     if result.returncode:
         raise ValueError(f"无法读取录制片段：{Path(path).name}")
     data = json.loads(result.stdout)
@@ -32,7 +34,8 @@ def presentation_boxes(count, layout="presentation"):
 
 
 def find_font():
-    for path in [Path("C:/Windows/Fonts/msyh.ttc"), Path("C:/Windows/Fonts/segoeui.ttf"),
+    for path in [bundle_root() / "fonts/NotoSansCJKsc-Regular.otf",
+                 Path("C:/Windows/Fonts/msyh.ttc"), Path("C:/Windows/Fonts/segoeui.ttf"),
                  Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
                  Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")]:
         if path.is_file():
@@ -68,7 +71,7 @@ def export_recording(plan, ffmpeg, ffprobe, progress=lambda value, message: None
         kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
         command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-filter_complex_threads", "1"] + args
         result = subprocess.run(command, cwd=work, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace", **kwargs)
+                                encoding="utf-8", errors="replace", env=external_environment(), **kwargs)
         if result.returncode:
             raise RuntimeError(f"{label}失败。已录片段保留在 {parts}\n{result.stderr.strip()[-900:]}")
         completed += 1

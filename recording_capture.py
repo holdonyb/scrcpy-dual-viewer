@@ -16,6 +16,7 @@ import time
 
 from PySide6.QtCore import QObject, Signal
 from recording_export import export_recording
+from app_runtime import external_environment
 
 
 def hidden_kwargs():
@@ -23,13 +24,17 @@ def hidden_kwargs():
 
 
 def find_media_tools(config, roots=()):
-    ffmpeg = config.get("ffmpeg_path") or shutil.which("ffmpeg")
+    ffmpeg = config.get("ffmpeg_path")
+    if not ffmpeg and not getattr(sys, "frozen", False):
+        ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         for root in roots:
             ffmpeg = next((str(p) for p in (root / "ffmpeg.exe", root / "ffmpeg/bin/ffmpeg.exe",
-                                          root / "ffmpeg/ffmpeg.exe", root / "ffmpeg") if p.is_file()), None)
+                                          root / "ffmpeg/ffmpeg.exe", root / "ffmpeg/bin/ffmpeg",
+                                          root / "ffmpeg/ffmpeg", root / "ffmpeg") if p.is_file()), None)
             if ffmpeg:
                 break
+    ffmpeg = ffmpeg or shutil.which("ffmpeg")
     ffprobe = None
     if ffmpeg:
         for name in ("ffprobe.exe", "ffprobe"):
@@ -44,7 +49,8 @@ def list_microphones(ffmpeg):
     if sys.platform != "win32":
         return []
     result = subprocess.run([ffmpeg, "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                            capture_output=True, encoding="utf-8", errors="replace", timeout=15, **hidden_kwargs())
+                            capture_output=True, encoding="utf-8", errors="replace", timeout=15,
+                            env=external_environment(), **hidden_kwargs())
     return list(dict.fromkeys(re.findall(r'"([^"\r\n]+)" \(audio\)', result.stderr)))
 
 
@@ -147,7 +153,7 @@ class Recorder(QObject):
             (Path(plan["folder"]) / "recording.json").write_text(json.dumps(public, ensure_ascii=False, indent=2), encoding="utf-8")
 
         def spawn(command, kind):
-            env = os.environ.copy()
+            env = external_environment()
             env["ADB"] = adb
             kwargs = hidden_kwargs()
             if kind == "device" and sys.platform == "win32":
@@ -245,7 +251,8 @@ class Recorder(QObject):
             persist()
             for device in plan["devices"]:
                 result = subprocess.run([adb, "-s", device["serial"], "shell", "getprop", "ro.build.version.sdk"],
-                                        capture_output=True, encoding="utf-8", errors="replace", timeout=10, **hidden_kwargs())
+                                        capture_output=True, encoding="utf-8", errors="replace", timeout=10,
+                                        env=external_environment(), **hidden_kwargs())
                 sdk = int(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip().isdigit() else 0
                 device["sdk"] = sdk
                 if device["audio"]:

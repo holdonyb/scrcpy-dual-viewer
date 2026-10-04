@@ -182,6 +182,10 @@ class RecordingTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "win32", "Windows console signal integration")
     def test_headless_pause_resume_background_and_mp4_finalization(self):
         win = self.window()
+        # CI desktops need not provide a tray; explicitly exercise the tray branch.
+        if win.tray is None:
+            from unittest.mock import Mock
+            win.tray = Mock()
         recorder = win.recording.recorder
         self.recorders.append(recorder)
         errors, results, commands = [], [], []
