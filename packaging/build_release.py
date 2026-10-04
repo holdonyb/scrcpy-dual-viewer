@@ -56,7 +56,7 @@ def main():
             archive.add(app, arcname=name)
     assets = sorted(p for p in output.iterdir() if p.suffix == ".exe" or p.name.endswith(".tar.gz"))
     (output / ("SHA256SUMS-windows.txt" if windows else "SHA256SUMS-linux.txt")).write_text(
-        "".join(hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n" for p in assets), encoding="utf-8")
+        "".join(hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n" for p in assets), encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

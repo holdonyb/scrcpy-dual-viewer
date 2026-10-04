@@ -45,7 +45,7 @@ jobs:
       - name: Verify package checksums and reports
         run: |
           cd downloaded/release
-          cat SHA256SUMS-windows.txt SHA256SUMS-linux.txt > SHA256SUMS.txt
+          cat SHA256SUMS-windows.txt SHA256SUMS-linux.txt | tr -d '\r' > SHA256SUMS.txt
           sha256sum -c SHA256SUMS.txt
           python - <<'PY'
           import json
