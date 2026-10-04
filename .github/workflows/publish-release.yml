@@ -1,0 +1,64 @@
+name: Publish verified download packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Build downloadable releases run ID
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source build completed successfully
+        id: build
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > build-run.json
+          python - <<'PY'
+          import json, os
+          data = json.load(open('build-run.json'))
+          assert data['conclusion'] == 'success' and data['status'] == 'completed'
+          assert data['head_branch'] == 'main'
+          assert data['path'] == '.github/workflows/release-build.yml'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha=' + data['head_sha'] + '\n')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run }}
+          pattern: '*-release'
+          merge-multiple: true
+          path: downloaded
+      - name: Verify package checksums and reports
+        run: |
+          cd downloaded/release
+          cat SHA256SUMS-windows.txt SHA256SUMS-linux.txt > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          python - <<'PY'
+          import json
+          for name in ['smoke-windows.json', 'smoke-windows-installed.json', 'smoke-linux.json']:
+              data = json.load(open(name))
+              assert data['passed'] is True and data['frozen'] is True and data['version'] == '0.2.1'
+              for check in ['gui', 'native_embed_and_close', 'headless_normal_finalize', 'export_1_sources', 'export_2_sources', 'export_3_sources']:
+                  assert data['checks'][check] is True
+          PY
+      - name: Upload draft then publish
+        env:
+          BUILD_SHA: ${{ steps.build.outputs.sha }}
+        run: |
+          gh release create v0.2.1 --draft --target "$BUILD_SHA" --title '多屏录制 0.2.1' --notes-file packaging/RELEASE_NOTES.md
+          gh release upload v0.2.1 downloaded/release/*.exe downloaded/release/*.tar.gz downloaded/release/SHA256SUMS.txt downloaded/release/smoke-*.json
+          gh release edit v0.2.1 --draft=false --latest

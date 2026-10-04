@@ -105,7 +105,7 @@ python packaging/build_release.py
 ## 验证与效果
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe tests/run_tests.py
 ```
 
 测试使用受控原生窗口、合成视频和测试音，不采集真实手机或电脑麦克风。覆盖此前七类缺陷修复、隐藏控制台正常收尾、暂停/继续、后台与退出、1～3 路导出、静音、讲解与设备声音混合、旋转和异常恢复。结果见 [回归输出](docs/reviews/2026-10-04/regression-results.txt)。
@@ -116,7 +116,7 @@ python packaging/build_release.py
 
 ![三台设备合成排版：模拟画面](docs/reviews/2026-10-04/07-composite-preview.png)
 
-当前版本已通过 25 项 Windows 本地自动检查；真实固件的声音支持、画质、延迟、旋转和长时间录制仍需实机验收。验证环境和范围见 [验证说明](docs/VALIDATION.md)。
+当前版本已通过 Windows 25 项源码检查、Linux 17 项源码检查，以及两个 Windows 下载包与 Linux 解压包的启动和媒体导出检查。真实固件的声音支持、画质、延迟、旋转和长时间录制仍需实机验收。验证环境和范围见 [验证说明](docs/VALIDATION.md)。
 
 ## 旧版
 
