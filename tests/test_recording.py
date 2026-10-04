@@ -40,7 +40,7 @@ def wait_until(predicate, timeout=20):
 class RecordingTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="hicool-recording-test-")
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.windows = []
         self.recorders = []
 

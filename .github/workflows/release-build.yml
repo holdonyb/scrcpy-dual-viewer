@@ -24,7 +24,7 @@ jobs:
           # Source discovery also exercises the downloaded portable scrcpy.
           New-Item -ItemType Directory -Force scrcpy | Out-Null
           Copy-Item -Path build/vendor/scrcpy/* -Destination scrcpy -Recurse
-          python -m unittest discover -s tests -v *> dist/tests-windows.txt
+          python tests/run_tests.py *> dist/tests-windows.txt
           Get-Content dist/tests-windows.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build portable EXE and installer
@@ -81,7 +81,7 @@ jobs:
           mkdir -p dist scrcpy fonts
           cp -a build/vendor/scrcpy/. scrcpy/
           cp -a build/vendor/fonts/. fonts/
-          xvfb-run -a python -m unittest discover -s tests -v > dist/tests-linux.txt 2>&1 || { cat dist/tests-linux.txt; exit 1; }
+          xvfb-run -a python tests/run_tests.py > dist/tests-linux.txt 2>&1 || { cat dist/tests-linux.txt; exit 1; }
           cat dist/tests-linux.txt
       - run: python packaging/build_release.py
       - name: Test extracted release

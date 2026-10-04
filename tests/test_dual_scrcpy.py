@@ -41,7 +41,7 @@ def wait_until(predicate, timeout=8):
 class RegressionTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="dual-viewer-regression-")
-        self.base = Path(self.tmp.name)
+        self.base = Path(self.tmp.name).resolve()
         self.windows = []
         self.sessions = []
 

@@ -1,6 +1,7 @@
 """Build on the target OS. Windows emits a single EXE; Linux an extracted app."""
 from pathlib import Path
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ def main():
             "--onefile" if windows else "--onedir", "--name", name]
     for source, target in ((vendor / "scrcpy", "scrcpy"), (vendor / "ffmpeg", "ffmpeg"),
                            (vendor / "fonts", "fonts"), (ROOT / "packaging/assets", "packaging/assets"),
+                           (ROOT / "packaging/licenses", "licenses"),
                            (ROOT / "THIRD_PARTY_NOTICES.md", ".")):
         args += ["--add-data", str(source) + (";" if windows else ":") + target]
     if windows:
@@ -27,7 +29,14 @@ def main():
              "--exclude-module", "PySide6.QtQml", "--exclude-module", "PySide6.QtQuick",
              "--distpath", str(ROOT / "dist"), "--workpath", str(ROOT / "build/pyinstaller"),
              "--specpath", str(ROOT / "build"), str(ROOT / "dual_scrcpy_qt.py")]
-    subprocess.run(args, cwd=ROOT, check=True)
+    env = os.environ.copy()
+    if windows:
+        # Avoid collecting unrelated ICU/UCRT DLLs from developer-tool PATHs.
+        # Windows 10/11 provide ICU and UCRT themselves; Qt ships its VC runtime.
+        system = Path(os.environ.get("SystemRoot", "C:/Windows"))
+        env["PATH"] = os.pathsep.join(map(str, (Path(sys.executable).parent, Path(sys.base_prefix),
+                                               Path(sys.base_prefix) / "DLLs", system / "System32", system)))
+    subprocess.run(args, cwd=ROOT, check=True, env=env)
     output = ROOT / "dist/release"
     output.mkdir(parents=True, exist_ok=True)
     if windows:

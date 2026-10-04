@@ -172,7 +172,7 @@ class RecordingPanel(QFrame):
         if not self.directory.text().strip():
             self.on_failed("请选择录屏保存目录。")
             return
-        folder = Path(self.directory.text().strip()).expanduser().resolve() / datetime.now().strftime("录屏_%Y%m%d_%H%M%S_%f")
+        folder = Path(self.directory.text().strip()).expanduser().resolve() / ("录屏_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
         plan = {"folder": str(folder), "devices": devices, "microphone": microphone,
                 "mode": self.mode.currentData(), "layout": self.layout_choice.currentData(),
                 "title": self.title.text().strip(), "date": datetime.now().strftime("%Y.%m.%d  %H:%M")}

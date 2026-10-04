@@ -31,7 +31,11 @@ def window_child(args):
     win.setWindowTitle(args[0])
     win.resize(320, 240)
     win.show()
-    return app.exec()
+    code = app.exec()
+    import shiboken6
+    shiboken6.delete(win)
+    shiboken6.delete(app)
+    return code
 
 
 def self_test(report_path):
@@ -156,6 +160,9 @@ def self_test(report_path):
             win.deleteLater()
             app.sendPostedEvents(None, QEvent.DeferredDelete)
             app.processEvents()
+        if app:
+            import shiboken6
+            shiboken6.delete(app)
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if report["passed"] else 1
