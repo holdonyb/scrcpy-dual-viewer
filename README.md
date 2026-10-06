@@ -2,7 +2,7 @@
 
 多屏录制是一款支持 1～3 台 Android 设备的桌面镜像与录屏软件，可在同一窗口预览并操控手机、Android 眼镜等设备。支持独立开始、暂停、继续和结束录制，窗口隐藏后仍可在后台采集；设备播放声音与电脑麦克风讲解可按需选择。视频既可分别保存，也可合成为带自定义标题、设备名称和布局的 MP4，适用于产品演示、操作培训和多设备流程记录。
 
-当前版本：**0.2.1**。支持 Windows 10/11 和 Linux x86_64（X11）。
+当前版本：**0.2.2**。支持 Windows 10/11 和 Linux x86_64（X11）。
 
 ## 下载
 
@@ -10,9 +10,9 @@
 
 | 平台 | 文件 | 使用方法 |
 | --- | --- | --- |
-| Windows 免安装 | [直接运行的 EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-windows-x64.exe) | 下载后双击运行。首次启动会解压内置组件，需要稍等几秒。 |
-| Windows 安装版 | [Setup EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-windows-x64-Setup.exe) | 安装到当前用户目录，通过开始菜单启动，可正常卸载。 |
-| Linux 便携版 | [tar.gz 解压包](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.1/MultiScreenRecorder-0.2.1-linux-x64.tar.gz) | 解压，运行其中的 `MultiScreenRecorder`；需要 Ubuntu 22.04+ 或兼容系统的 X11 桌面。 |
+| Windows 免安装 | [直接运行的 EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.2/MultiScreenRecorder-0.2.2-windows-x64.exe) | 下载后双击运行。首次启动会解压内置组件，需要稍等几秒。 |
+| Windows 安装版 | [Setup EXE](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.2/MultiScreenRecorder-0.2.2-windows-x64-Setup.exe) | 安装到当前用户目录，通过开始菜单启动，可正常卸载。 |
+| Linux 便携版 | [tar.gz 解压包](https://github.com/holdonyb/scrcpy-dual-viewer/releases/download/v0.2.2/MultiScreenRecorder-0.2.2-linux-x64.tar.gz) | 解压，运行其中的 `MultiScreenRecorder`；需要 Ubuntu 22.04+ 或兼容系统的 X11 桌面。 |
 
 下载包已包含 Python、Qt、scrcpy、adb、FFmpeg、ffprobe 和中文字体，无需另外安装这些工具。Windows 包目前未做代码签名。各文件可使用随附的 `SHA256SUMS` 校验。
 
@@ -21,7 +21,7 @@
 Linux 使用示例：
 
 ```bash
-tar -xzf MultiScreenRecorder-0.2.1-linux-x64.tar.gz
+tar -xzf MultiScreenRecorder-0.2.2-linux-x64.tar.gz
 cd MultiScreenRecorder
 ./MultiScreenRecorder
 ```
@@ -55,7 +55,7 @@ python -m venv .venv
 ## 录制方法
 
 1. 选择设备数量及各面板的设备，填写用于视频的设备名称。
-2. 勾选想录的「设备声音」。需要讲解时点「查找麦克风」，选择电脑输入，再勾选「电脑麦克风（讲解）」。麦克风默认关闭。
+2. 勾选想录的「设备声音」。需要讲解时勾选「电脑麦克风（讲解）」，软件自动查找输入设备，再从下拉框选择要用的麦克风；点「查找麦克风」可手动刷新。同名输入分别列出，原输入不可用时需重新选择。麦克风默认关闭。
 3. 选择输出方式、布局、标题与保存目录，点击「开始录制」。标题可留空，输出默认使用“屏幕录制”。镜像用于预览与操作，录制由独立的无窗口进程完成。
 4. 点击「暂停」停止当前片段和声音采集，点击「继续」录下一段。最终视频不包含暂停期间的空档。
 5. 点击「结束并保存」，等待导出完成，再点「打开输出」。导出期间窗口仍能响应，退出会等待保存完成。
@@ -69,7 +69,7 @@ python -m venv .venv
 # 工具不在 PATH 时，可加 --ffmpeg '完整路径\ffmpeg.exe' --ffprobe '完整路径\ffprobe.exe'
 ```
 
-重试会重新生成该录屏目录内的输出文件。正常停止会等待 scrcpy 和 FFmpeg 完成文件收尾；如果设备断连、采集报错或关闭超时，界面会显示失败并保留片段，不会把它标成成功录制。
+重试会重新生成该录屏目录内的输出文件。正常停止会等待 scrcpy 和 FFmpeg 完成文件收尾；如果 Android 设备断连、设备采集报错或关闭超时，界面会显示失败并保留片段。电脑麦克风属于可选输入：名称变化时通过设备标识匹配；找不到、无法打开或录到一半退出时，界面和运行记录会提示电脑讲解停止，设备画面及所选播放声音继续录制。可读取的既有讲解保留，后续不再采集讲解，暂停后继续也不会自动换到其他麦克风。
 
 ## 设备声音支持
 

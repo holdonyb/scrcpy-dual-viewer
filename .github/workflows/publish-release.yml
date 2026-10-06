@@ -51,14 +51,14 @@ jobs:
           import json
           for name in ['smoke-windows.json', 'smoke-windows-installed.json', 'smoke-linux.json']:
               data = json.load(open(name))
-              assert data['passed'] is True and data['frozen'] is True and data['version'] == '0.2.1'
-              for check in ['gui', 'native_embed_and_close', 'headless_normal_finalize', 'export_1_sources', 'export_2_sources', 'export_3_sources']:
+              assert data['passed'] is True and data['frozen'] is True and data['version'] == '0.2.2'
+              for check in ['gui', 'native_embed_and_close', 'headless_normal_finalize', 'optional_microphone_failure', 'export_1_sources', 'export_2_sources', 'export_3_sources']:
                   assert data['checks'][check] is True
           PY
       - name: Upload draft then publish
         env:
           BUILD_SHA: ${{ steps.build.outputs.sha }}
         run: |
-          gh release create v0.2.1 --draft --target "$BUILD_SHA" --title '多屏录制 0.2.1' --notes-file packaging/RELEASE_NOTES.md
-          gh release upload v0.2.1 downloaded/release/*.exe downloaded/release/*.tar.gz downloaded/release/SHA256SUMS.txt downloaded/release/smoke-*.json
-          gh release edit v0.2.1 --draft=false --latest
+          gh release create v0.2.2 --draft --target "$BUILD_SHA" --title '多屏录制 0.2.2' --notes-file packaging/RELEASE_NOTES.md
+          gh release upload v0.2.2 downloaded/release/*.exe downloaded/release/*.tar.gz downloaded/release/SHA256SUMS.txt downloaded/release/smoke-*.json
+          gh release edit v0.2.2 --draft=false --latest

@@ -36,6 +36,35 @@ def wait_until(predicate, timeout=20):
     return bool(predicate())
 
 
+class MicrophoneTests(unittest.TestCase):
+    def test_directshow_alternative_ids_and_duplicate_chinese_labels(self):
+        output = '\n'.join([
+            '[dshow] "摄像头" (video)', '[dshow] Alternative name "@device_video"',
+            '[dshow] "麦克风 (Senary Audio)" (audio)', '[dshow] Alternative name "@device_cm_mic_1"',
+            '[dshow] "麦克风 (Senary Audio)" (audio)', '[dshow] Alternative name "@device_cm_mic_2"',
+            '[dshow] "Disabled input" (none)', '[dshow] Alternative name "@unavailable"',
+            '[dshow] "Camera with audio" (audio, video)', '[dshow] Alternative name "@camera_audio"',
+            '[dshow] "Microphone "Custom"" (audio)', '[dshow] Alternative name "@quoted"',
+            '[dshow] "Other microphone" (audio)',
+        ])
+        self.assertEqual(capture.parse_microphones(output), [
+            {"name": "麦克风 (Senary Audio)", "id": "@device_cm_mic_1"},
+            {"name": "麦克风 (Senary Audio)", "id": "@device_cm_mic_2"},
+            {"name": "Camera with audio", "id": "@camera_audio"},
+            {"name": 'Microphone "Custom"', "id": "@quoted"},
+            {"name": "Other microphone", "id": "Other microphone"},
+        ])
+
+    def test_microphone_resolution_never_substitutes_another_input(self):
+        devices = [{"name": "麦克风", "id": "@first"}, {"name": "麦克风", "id": "@second"}]
+        self.assertEqual(capture.resolve_microphone("@second", devices), "@second")
+        with self.assertRaises(ValueError):
+            capture.resolve_microphone("麦克风", devices)
+        with self.assertRaises(ValueError):
+            capture.resolve_microphone("@removed", devices)
+        self.assertEqual(capture.resolve_microphone("麦克风", devices[:1]), "@first")
+
+
 @unittest.skipUnless(FFMPEG and FFPROBE, "FFmpeg/ffprobe required")
 class RecordingTests(unittest.TestCase):
     def setUp(self):
@@ -48,11 +77,17 @@ class RecordingTests(unittest.TestCase):
         for recorder in self.recorders:
             recorder.finish()
         wait_until(lambda: all(not r.busy for r in self.recorders), 30)
+        for recorder in self.recorders:
+            if recorder._thread:
+                recorder._thread.join(timeout=2)
         for win in self.windows:
             win.quit_after_recording()
         APP.processEvents()
         for win in self.windows:
             win.deleteLater()
+        for recorder in self.recorders:
+            if recorder.parent() is None:
+                recorder.deleteLater()
         APP.sendPostedEvents(None, QEvent.DeferredDelete)
         self.temp.cleanup()
 
@@ -165,7 +200,9 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(len(plan["devices"]), 3)
         self.assertEqual([d["audio"] for d in plan["devices"]], [True, False, True])
         self.assertIsNone(plan["microphone"], "mic must stay off unless selected")
-        win.recording.mic.setChecked(True)
+        with patch.object(win.recording, "refresh_microphones") as refresh:
+            win.recording.mic.setChecked(True)
+        refresh.assert_called_once()
         win.recording.microphones.addItem("SYNTHETIC microphone", "SYNTHETIC microphone")
         win.recording.microphones.setCurrentIndex(1)
         with patch.object(win.recording.recorder, "start") as start:
@@ -178,6 +215,23 @@ class RecordingTests(unittest.TestCase):
         self.assertIn("--audio-source=output", capture.audio_options(31, True))
         self.assertIn("--audio-source=playback", capture.audio_options(34, True))
         self.assertIn("--audio-dup", capture.audio_options(34, True))
+
+    def test_microphone_refresh_preserves_id_and_requires_choice_if_removed(self):
+        panel = self.window().recording
+        devices = [{"name": "麦克风", "id": "@first"}, {"name": "麦克风", "id": "@second"}]
+        panel.on_microphones(devices, "")
+        self.assertNotEqual(panel.microphones.itemText(0), panel.microphones.itemText(1))
+        panel.microphones.setCurrentIndex(1)
+        panel.on_microphones([{"name": "改名的麦克风", "id": "@second"}, devices[0]], "")
+        self.assertEqual(panel.microphones.currentData(), "@second")
+        self.assertEqual(panel.microphones.currentText(), "改名的麦克风")
+        panel.on_microphones(devices[:1], "")
+        self.assertIsNone(panel.microphones.currentData())
+        panel.on_microphones(devices[:1], "")
+        self.assertIsNone(panel.microphones.currentData(), "refresh must not silently switch microphones")
+        panel.on_warning("电脑麦克风不可用，设备录制继续。\n详细错误")
+        self.assertIn("设备录制继续", panel.hint.text())
+        self.assertNotIn("请检查录制", panel.status.text())
 
     @unittest.skipUnless(sys.platform == "win32", "Windows console signal integration")
     def test_headless_pause_resume_background_and_mp4_finalization(self):
@@ -272,7 +326,8 @@ class RecordingTests(unittest.TestCase):
             "microphone": "SYNTHETIC microphone", "mode": "separate", "title": "Synthetic"}
         win.show()
         with patch.object(capture.subprocess, "Popen", side_effect=spawn), \
-             patch.object(capture.subprocess, "run", side_effect=run):
+             patch.object(capture.subprocess, "run", side_effect=run), \
+             patch.object(capture, "list_microphones", return_value=[{"name": "SYNTHETIC microphone", "id": "SYNTHETIC microphone"}]):
             recorder.start(plan, m.default_config(), "SYNTHETIC_SCRCPY", "SYNTHETIC_ADB", FFMPEG, FFPROBE, ROOT / "dual_scrcpy_qt.py")
             self.assertTrue(wait_until(lambda: recorder.state == "recording" or errors))
             wait_until(lambda: False, 1.5)
@@ -286,6 +341,80 @@ class RecordingTests(unittest.TestCase):
             info = media_info(FFPROBE, output)
             self.assertTrue(info["video"] and info["audio"])
         self.assertFalse(win.isVisible())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows capture integration")
+    def test_optional_microphone_failures_keep_two_devices_and_exports_running(self):
+        original_spawn, original_run = subprocess.Popen, subprocess.run
+        for failure in ("missing", "launch", "opening", "midstream"):
+            with self.subTest(failure=failure):
+                recorder = capture.Recorder()
+                self.recorders.append(recorder)
+                errors, results, warnings, mic_commands, device_commands = [], [], [], [], []
+                recorder.failed.connect(errors.append)
+                recorder.saved.connect(results.append)
+                recorder.warning.connect(warnings.append)
+                def run(argv, **kwargs):
+                    if argv[0] == "SYNTHETIC_ADB":
+                        return subprocess.CompletedProcess(argv, 0, "34\n", "")
+                    return original_run(argv, **kwargs)
+                def spawn(argv, **kwargs):
+                    if argv[0] == "SYNTHETIC_SCRCPY":
+                        device_commands.append(argv)
+                        argv = [sys.executable, str(ROOT / "tests/console_capture_child.py")] + argv[1:]
+                    elif "dshow" in argv:
+                        mic_commands.append(argv)
+                        self.assertEqual(argv[argv.index("-i")+1], "audio=@SYNTHETIC_MIC")
+                        if failure == "launch":
+                            raise OSError("Synthetic microphone unavailable")
+                        if failure == "opening":
+                            argv = [sys.executable, "-c", "import sys; print('Could not find audio only device with name [Synthetic microphone]', file=sys.stderr); sys.exit(-5)"]
+                        else:
+                            start, end = argv.index("-f"), argv.index("-vn")
+                            argv = argv[:start] + ["-re", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "0.6"] + argv[end:]
+                    return original_spawn(argv, **kwargs)
+                folder = self.base / failure
+                plan = {"folder": str(folder), "devices": [
+                    {"slot": slot, "serial": f"SYNTHETIC_{slot}", "title": slot, "audio": True} for slot in "AB"],
+                    "microphone": "@SYNTHETIC_MIC", "mode": "both", "title": "Synthetic"}
+                available = [] if failure == "missing" else [{"name": "Synthetic microphone", "id": "@SYNTHETIC_MIC"}]
+                with patch.object(capture.subprocess, "Popen", side_effect=spawn), \
+                     patch.object(capture.subprocess, "run", side_effect=run), \
+                     patch.object(capture, "list_microphones", return_value=available):
+                    recorder.start(plan, m.default_config(), "SYNTHETIC_SCRCPY", "SYNTHETIC_ADB", FFMPEG, FFPROBE, ROOT / "dual_scrcpy_qt.py")
+                    self.assertTrue(wait_until(lambda: (warnings and recorder.state == "recording") or errors))
+                    self.assertFalse(errors, errors)
+                    self.assertTrue(recorder.busy)
+                    self.assertEqual(recorder.state, "recording")
+                    self.assertTrue(wait_until(lambda: (folder / ".parts/000_B.console.txt").is_file()))
+                    wait_until(lambda: False, 0.9)
+                    if failure == "opening":
+                        recorder.pause()
+                        self.assertTrue(wait_until(lambda: recorder.state == "paused" or errors))
+                        self.assertFalse(errors, errors)
+                        recorder.resume()
+                        self.assertTrue(wait_until(lambda: recorder.state == "recording" or errors))
+                        wait_until(lambda: False, 1.0)
+                    recorder.finish()
+                    self.assertTrue(wait_until(lambda: not recorder.busy, 40))
+                    APP.processEvents()
+                self.assertFalse(errors, errors)
+                self.assertEqual(len(warnings), 1)
+                self.assertIn("设备录制继续", warnings[0])
+                self.assertIsNone(plan["microphone"])
+                self.assertEqual(len(mic_commands), 0 if failure == "missing" else 1)
+                self.assertEqual(len(device_commands), 4 if failure == "opening" else 2)
+                self.assertEqual(len(results), 1)
+                self.assertEqual(len(results[0]["outputs"]), 3)
+                self.assertIn(warnings[0], results[0]["notes"])
+                public = json.loads((folder / "recording.json").read_text(encoding="utf-8"))
+                self.assertIn(warnings[0], public["notes"])
+                if failure == "midstream":
+                    self.assertTrue(media_info(FFPROBE, plan["segments"][0]["mic"])["audio"])
+                else:
+                    self.assertTrue(all("mic" not in s for s in plan["segments"]))
+                for output in results[0]["outputs"]:
+                    info = media_info(FFPROBE, output)
+                    self.assertTrue(info["video"] and info["audio"])
 
     def test_preparation_cancel_does_not_launch_capture(self):
         recorder = capture.Recorder()

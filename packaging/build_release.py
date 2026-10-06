@@ -54,7 +54,8 @@ def main():
             "电脑麦克风目前仅支持 Windows，Linux 可录设备播放声音。\n", encoding="utf-8")
         with tarfile.open(output / f"MultiScreenRecorder-{VERSION}-linux-x64.tar.gz", "w:gz") as archive:
             archive.add(app, arcname=name)
-    assets = sorted(p for p in output.iterdir() if p.suffix == ".exe" or p.name.endswith(".tar.gz"))
+    assets = sorted(p for p in output.glob(f"MultiScreenRecorder-{VERSION}-*")
+                    if p.suffix == ".exe" or p.name.endswith(".tar.gz"))
     (output / ("SHA256SUMS-windows.txt" if windows else "SHA256SUMS-linux.txt")).write_text(
         "".join(hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n" for p in assets), encoding="utf-8", newline="\n")
 

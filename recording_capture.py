@@ -15,7 +15,7 @@ import threading
 import time
 
 from PySide6.QtCore import QObject, Signal
-from recording_export import export_recording
+from recording_export import export_recording, media_info
 from app_runtime import external_environment
 
 
@@ -45,13 +45,41 @@ def find_media_tools(config, roots=()):
     return ffmpeg, ffprobe or shutil.which("ffprobe")
 
 
+def parse_microphones(stderr):
+    """Keep DirectShow alternative IDs, including devices with identical labels."""
+    devices = []
+    current = None
+    for line in stderr.splitlines():
+        source = re.search(r'"(.*)" \(([^)]*)\)\s*$', line)
+        if source:
+            current = None
+            if "audio" in source[2].split(", "):
+                current = {"name": source[1], "id": source[1]}
+                devices.append(current)
+        else:
+            alternative = re.search(r'Alternative name "([^"\r\n]+)"', line)
+            if current is not None and alternative:
+                current["id"] = alternative[1]
+    return devices
+
+
+def resolve_microphone(selected, devices):
+    matches = [d for d in devices if d["id"] == selected]
+    if not matches and not selected.startswith("@"):
+        matches = [d for d in devices if d["name"] == selected]
+    if len(matches) != 1:
+        available = "；".join(d["name"] for d in devices) or "未检测到可用麦克风"
+        raise ValueError("找不到所选麦克风或名称重复，请重新查找并选择麦克风。\n当前检测到：" + available)
+    return matches[0]["id"]
+
+
 def list_microphones(ffmpeg):
     if sys.platform != "win32":
         return []
     result = subprocess.run([ffmpeg, "-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
                             capture_output=True, encoding="utf-8", errors="replace", timeout=15,
                             env=external_environment(), **hidden_kwargs())
-    return list(dict.fromkeys(re.findall(r'"([^"\r\n]+)" \(audio\)', result.stderr)))
+    return parse_microphones(result.stderr)
 
 
 def signal_private_console(pid):
@@ -99,6 +127,7 @@ class Recorder(QObject):
     progress = Signal(int, str)
     saved = Signal(object)
     failed = Signal(str)
+    warning = Signal(str)
     idle = Signal()
 
     def __init__(self, parent=None):
@@ -172,8 +201,45 @@ class Recorder(QObject):
             reader.start()
             children.append((proc, kind, tail, reader))
 
+        def disable_microphone(reason):
+            # A failed optional input must never stop the Android captures.
+            plan["microphone"] = None
+            if segment and segment.get("mic"):
+                try:
+                    info = media_info(ffprobe, segment["mic"])
+                    if not info["audio"] or info["duration"] <= 0:
+                        segment.pop("mic")
+                except (ValueError, OSError, subprocess.SubprocessError):
+                    segment.pop("mic", None)
+            message = "电脑麦克风不可用，设备录制继续；本次不再采集电脑讲解。\n" + reason
+            notes.append(message)
+            persist()
+            self.warning.emit(message)
+
+        def check_microphone():
+            for child in list(children):
+                proc, kind, tail, reader = child
+                if kind != "mic" or proc.poll() is None:
+                    continue
+                reader.join(timeout=1)
+                if proc.stdin:
+                    proc.stdin.close()
+                children.remove(child)
+                disable_microphone(f"麦克风采集退出（代码 {proc.returncode}）：" + "\n".join(tail)[-900:])
+
         def start_segment():
             nonlocal segment, segment_started
+            if plan.get("microphone"):
+                try:
+                    available = list_microphones(ffmpeg)
+                    plan["microphone"] = resolve_microphone(plan["microphone"], available)
+                    name = next(d["name"] for d in available if d["id"] == plan["microphone"])
+                    self.log.emit("电脑麦克风：" + name)
+                except (ValueError, OSError, subprocess.SubprocessError) as error:
+                    disable_microphone(str(error))
+            if not self._commands.empty():
+                self.log.emit("已取消录制准备。")
+                return False
             segment = {}
             index = len(plan["segments"])
             segment_started = time.monotonic()
@@ -193,14 +259,20 @@ class Recorder(QObject):
             if plan.get("microphone"):
                 output = Path(plan["folder"]) / ".parts" / f"{index:03d}_mic.m4a"
                 segment["mic"] = str(output)
-                spawn([ffmpeg, "-hide_banner", "-loglevel", "warning", "-y", "-f", "dshow",
-                       "-i", f"audio={plan['microphone']}", "-vn", "-c:a", "aac", "-b:a", "192k",
-                       "-ar", "48000", "-ac", "2", str(output)], "mic")
+                try:
+                    spawn([ffmpeg, "-hide_banner", "-loglevel", "warning", "-y", "-f", "dshow",
+                           "-i", f"audio={plan['microphone']}", "-vn", "-c:a", "aac", "-b:a", "192k",
+                           "-ar", "48000", "-ac", "2", str(output)], "mic")
+                except OSError as error:
+                    disable_microphone(str(error))
             self._set_state("recording")
+            return True
 
         def stop_segment():
             nonlocal segment, segment_started, total
+            check_microphone()
             errors = []
+            mic_errors = []
             # Signal all inputs first; wait only afterwards to keep stop times close.
             signal_threads = []
             def signal_child(proc, kind):
@@ -211,10 +283,10 @@ class Recorder(QObject):
                     else:
                         request_capture_stop(proc, main_script)
                 except (OSError, subprocess.SubprocessError) as error:
-                    errors.append(f"停止采集失败：{error}")
+                    (mic_errors if kind == "mic" else errors).append(f"停止采集失败：{error}")
             for proc, kind, tail, reader in children:
                 if proc.poll() is not None:
-                    errors.append("采集意外退出：" + "\n".join(tail)[-700:])
+                    (mic_errors if kind == "mic" else errors).append("采集意外退出：" + "\n".join(tail)[-700:])
                     continue
                 worker = threading.Thread(target=signal_child, args=(proc, kind), daemon=True)
                 worker.start()
@@ -227,13 +299,15 @@ class Recorder(QObject):
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait(timeout=5)
-                    errors.append("采集关闭超时，片段可能不完整")
+                    (mic_errors if kind == "mic" else errors).append("采集关闭超时，片段可能不完整")
                 reader.join(timeout=1)
                 if proc.stdin:
                     proc.stdin.close()
                 if proc.returncode:
-                    errors.append("采集返回错误：" + "\n".join(tail)[-700:])
+                    (mic_errors if kind == "mic" else errors).append("采集返回错误：" + "\n".join(tail)[-700:])
             children.clear()
+            if mic_errors:
+                disable_microphone("\n".join(dict.fromkeys(mic_errors)))
             if segment is not None:
                 plan["segments"].append(segment)
                 total += max(0, time.monotonic() - segment_started)
@@ -269,12 +343,14 @@ class Recorder(QObject):
             if not self._commands.empty():
                 self.log.emit("已取消录制准备。")
                 return
-            start_segment()
+            if not start_segment():
+                return
             while True:
                 try:
                     command = self._commands.get(timeout=0.1)
                 except queue.Empty:
                     command = None
+                check_microphone()
                 if command == "pause":
                     stop_segment()
                     self._set_state("paused")
@@ -292,7 +368,11 @@ class Recorder(QObject):
                 if children:
                     exited = next((child for child in children if child[0].poll() is not None), None)
                     if exited:
-                        raise RuntimeError(f"采集已断开（退出代码 {exited[0].returncode}）：" + "\n".join(exited[2])[-900:])
+                        if exited[1] == "mic":
+                            check_microphone()
+                        else:
+                            exited[3].join(timeout=1)
+                            raise RuntimeError(f"设备采集已断开（退出代码 {exited[0].returncode}）：" + "\n".join(exited[2])[-900:])
                     self.elapsed.emit(total + time.monotonic() - segment_started)
         except Exception as error:
             self._set_state("stopping")

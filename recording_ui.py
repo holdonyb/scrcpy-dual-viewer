@@ -1,10 +1,11 @@
 """Recording controls for one to three selected Android sources."""
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 import sys
 import threading
 
-from PySide6.QtCore import Signal, QUrl
+from PySide6.QtCore import Signal, QSignalBlocker, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QProgressBar, QPushButton, QVBoxLayout)
@@ -74,13 +75,17 @@ class RecordingPanel(QFrame):
         row.addWidget(self.mic)
         self.microphones = QComboBox()
         self.microphones.addItem("点击查找麦克风", None)
+        self._microphone_selection = None
+        self.microphones.currentIndexChanged.connect(self.remember_microphone)
         self.microphones.setMinimumWidth(240)
         row.addWidget(self.microphones)
         self.btn_mics = QPushButton("查找麦克风")
         self.btn_mics.clicked.connect(self.refresh_microphones)
+        self.mic.toggled.connect(self.on_microphone_toggle)
         row.addWidget(self.btn_mics)
         row.addStretch()
-        self.hint = QLabel("设备播放声音在各面板勾选。最小化后继续录制；暂停时不采集声音。")
+        self.default_hint = "设备播放声音在各面板勾选。最小化后继续录制；暂停时不采集声音。"
+        self.hint = QLabel(self.default_hint)
         self.hint.setWordWrap(True)
         row.addWidget(self.hint, 1)
         option_rows.addLayout(row)
@@ -102,6 +107,7 @@ class RecordingPanel(QFrame):
         self.recorder.progress.connect(self.on_progress)
         self.recorder.saved.connect(self.on_saved)
         self.recorder.failed.connect(self.on_failed)
+        self.recorder.warning.connect(self.on_warning)
         self.recorder.idle.connect(window._finish_close)
         self.microphones_found.connect(self.on_microphones)
         self._seconds = 0
@@ -114,6 +120,8 @@ class RecordingPanel(QFrame):
             self.directory.setText(path)
 
     def refresh_microphones(self):
+        if not self.btn_mics.isEnabled() or self.recorder.busy:
+            return
         ffmpeg, _ = find_media_tools(self.window.cfg, self.window.resource_roots)
         if not ffmpeg:
             self.on_failed("请先在设置中选择 FFmpeg。")
@@ -126,17 +134,38 @@ class RecordingPanel(QFrame):
                 self.microphones_found.emit([], str(error))
         threading.Thread(target=work, daemon=True).start()
 
-    def on_microphones(self, names, error):
+    def on_microphone_toggle(self, enabled):
+        if enabled and self.microphones.currentData() is None:
+            self.refresh_microphones()
+
+    def remember_microphone(self):
+        if self.microphones.currentData():
+            self._microphone_selection = self.microphones.currentData()
+
+    def on_microphones(self, devices, error):
         self.btn_mics.setEnabled(True)
-        selected = self.microphones.currentText()
+        selected = self.microphones.currentData() or self._microphone_selection
+        blocker = QSignalBlocker(self.microphones)
         self.microphones.clear()
-        for name in names:
-            self.microphones.addItem(name, name)
-        if not names:
+        counts = Counter(d["name"] for d in devices)
+        seen = Counter()
+        for device in devices:
+            name = device["name"]
+            seen[name] += 1
+            label = f"{name}（{seen[name]}）" if counts[name] > 1 else name
+            self.microphones.addItem(label, device["id"])
+        if not devices:
             self.microphones.addItem("未找到麦克风", None)
             self.window.append_log(error or "未找到电脑麦克风，请检查 Windows 音频设备。")
-        elif selected in names:
-            self.microphones.setCurrentText(selected)
+        elif selected:
+            index = self.microphones.findData(selected)
+            if index >= 0:
+                self.microphones.setCurrentIndex(index)
+            else:
+                self.microphones.insertItem(0, "原麦克风不可用，请重新选择", None)
+                self.microphones.setCurrentIndex(0)
+        blocker.unblock()
+        self.remember_microphone()
 
     def start(self):
         window = self.window
@@ -186,6 +215,7 @@ class RecordingPanel(QFrame):
         window.save_settings()
         self._seconds = 0
         self._outcome = "待录制"
+        self.hint.setText(self.default_hint)
         self.progress.hide()
         self.output_folder = str(folder)
         self.recorder.start(plan, config, window.scrcpy_path, window.adb.adb_path, ffmpeg, ffprobe, window.main_script)
@@ -241,6 +271,12 @@ class RecordingPanel(QFrame):
         self.window.append_log(message)
         self.status.setText("请检查录制，详情见运行记录")
         self.window.notify_failure(message)
+
+    def on_warning(self, message):
+        self.hint.setText(message.splitlines()[0])
+        self.window.append_log(message)
+        if self.window.tray:
+            self.window.tray.showMessage("电脑讲解已停止", message.splitlines()[0])
 
     def open_output(self):
         if self.output_folder:

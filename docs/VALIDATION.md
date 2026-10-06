@@ -1,5 +1,19 @@
 # 验证说明
 
+## 0.2.2 麦克风选择与采集隔离
+
+2026-10-06，Windows 11 本地 29 项源码检查通过，进程退出码 0。使用 `tests/run_tests.py`，为新增的采集测试显式结束工作线程并销毁无父对象的 Recorder，避免测试结束时 Qt 对象清理失败。
+
+- 从 DirectShow 枚举输出读取显示名称和 Alternative name，覆盖中文、同名输入、名称含引号、摄像头附带音频和无音频输入的过滤。
+- 下拉框支持实际输入选择；刷新时按标识保持选择，名称变化保留原设备，同名输入分别显示，设备消失后多次刷新也不自动换到另一个输入。
+- 用两路模拟设备复现麦克风不存在、启动失败、打开失败和录制中退出；健康设备继续采集，提示讲解停止，分别视频和合成视频均有画面及设备测试音。
+- 打开麦克风失败后暂停/继续不会再次启动失败输入；有效的既有讲解片段保留，无效麦克风文件不进入导出。
+- 实际发布包自检新增 `optional_microphone_failure`，使用真实 FFmpeg 模拟两个采集进程和失败的音频输入，验证 Recorder 持续运行并保存三个 MP4；不打开真实麦克风。
+
+名称匹配依据 [FFmpeg DirectShow 文档](https://ffmpeg.org/ffmpeg-devices.html#dshow)及 [FFmpeg 7.1.1 源码](https://github.com/FFmpeg/FFmpeg/blob/n7.1.1/libavdevice/dshow.c)：输入可用显示名称或 Alternative name，名称匹配按原字符串比较。用户电脑的具体麦克风可用性和长时间双设备录制仍需实机确认。
+
+## 0.2.1 发布验收记录
+
 2026-10-04，版本 0.2.1 完成 Windows 11 本地验证和 Windows / Ubuntu 22.04 发布包验收。打包使用 Python 3.11、PySide6 6.11.2、scrcpy 4.1；Windows 内置 Gyan FFmpeg 7.1.1 essentials，Linux 内置 BtbN FFmpeg 8.1.3 快照。
 
 ```powershell

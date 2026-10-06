@@ -38,6 +38,91 @@ def window_child(args):
     return code
 
 
+def microphone_failure_test(win, base, ffmpeg, ffprobe, wait_for):
+    """Exercise the packaged Recorder with two real synthetic video processes."""
+    from unittest.mock import patch
+    import recording_capture as capture
+    original_spawn, original_run = subprocess.Popen, subprocess.run
+    device_processes = []
+    mic_commands = []
+    warnings, errors, results = [], [], []
+    recorder = capture.Recorder(win)
+    recorder.warning.connect(warnings.append)
+    recorder.failed.connect(errors.append)
+    recorder.saved.connect(results.append)
+
+    class SyntheticDevice:
+        # FFmpeg uses 255 for a normal SIGINT/CTRL_BREAK stop; scrcpy uses 0.
+        def __init__(self, process):
+            self.process = process
+
+        @property
+        def returncode(self):
+            return 0 if self.process.returncode == 255 else self.process.returncode
+
+        def poll(self):
+            self.process.poll()
+            return self.returncode
+
+        def wait(self, **kwargs):
+            self.process.wait(**kwargs)
+            return self.returncode
+
+        def __getattr__(self, name):
+            return getattr(self.process, name)
+
+    def run(argv, **kwargs):
+        if argv[0] == "SYNTHETIC_ADB":
+            return subprocess.CompletedProcess(argv, 0, "34\n", "")
+        return original_run(argv, **kwargs)
+
+    def spawn(argv, **kwargs):
+        if argv[0] == "SYNTHETIC_SCRCPY":
+            output = argv[argv.index("--record") + 1]
+            argv = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-re", "-f", "lavfi", "-i",
+                    "testsrc2=size=320x240:rate=15", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", output]
+            child = SyntheticDevice(original_spawn(argv, **kwargs))
+            device_processes.append(child)
+            return child
+        if "dshow" in argv:
+            mic_commands.append(argv)
+            # Deliberately invalid synthetic input: never enumerate/open real microphones.
+            argv = [ffmpeg, "-v", "error", "-f", "lavfi", "-i", "nonexistent_synthetic_microphone", argv[-1]]
+        return original_spawn(argv, **kwargs)
+
+    plan = {"folder": str(base / "optional-mic"), "devices": [
+        {"slot": slot, "serial": "SYNTHETIC_" + slot, "title": "模拟设备 " + slot, "audio": True} for slot in "AB"],
+        "microphone": "@SYNTHETIC_MIC", "mode": "both", "title": "麦克风故障测试"}
+    with patch.object(capture.subprocess, "run", side_effect=run), \
+         patch.object(capture.subprocess, "Popen", side_effect=spawn), \
+         patch.object(capture, "list_microphones", return_value=[{"name": "Synthetic", "id": "@SYNTHETIC_MIC"}]):
+        try:
+            recorder.start(plan, {"max_size": "0", "bitrate": "0", "fps": "30"},
+                           "SYNTHETIC_SCRCPY", "SYNTHETIC_ADB", ffmpeg, ffprobe,
+                           Path(__file__).with_name("dual_scrcpy_qt.py"))
+            assert wait_for(lambda: warnings or errors), "Missing microphone warning"
+            assert not errors and recorder.busy and recorder.state == "recording", errors
+            assert len(device_processes) == 2 and all(p.poll() is None for p in device_processes)
+            wait_for(lambda: False, 1.2)
+            recorder.finish()
+            assert wait_for(lambda: not recorder.busy, 60), "Recorder did not finish"
+            assert not errors and len(results) == 1, errors
+            assert len(mic_commands) == 1 and len(warnings) == 1
+            assert warnings[0] in results[0]["notes"]
+            assert len(results[0]["outputs"]) == 3
+            for output in results[0]["outputs"]:
+                info = media_info(ffprobe, output)
+                assert info["video"] and info["audio"] and info["duration"] > 0.5
+        finally:
+            recorder.finish()
+            wait_for(lambda: not recorder.busy, 30)
+            for process in device_processes:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=10)
+
+
 def self_test(report_path):
     report = {"version": VERSION, "platform": sys.platform, "frozen": bool(getattr(sys, "frozen", False)),
               "checks": {}, "passed": False}
@@ -119,6 +204,9 @@ def self_test(report_path):
             assert media_info(ffprobe, capture)["duration"] > 0.5
             report["checks"]["headless_normal_finalize"] = True
             proc = None
+
+            microphone_failure_test(win, base, ffmpeg, ffprobe, wait_for)
+            report["checks"]["optional_microphone_failure"] = True
 
             sources = []
             for index in range(3):
