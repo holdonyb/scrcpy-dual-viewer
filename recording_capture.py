@@ -223,7 +223,10 @@ class Recorder(QObject):
                     continue
                 reader.join(timeout=1)
                 if proc.stdin:
-                    proc.stdin.close()
+                    try:
+                        proc.stdin.close()
+                    except OSError:
+                        pass  # A broken optional input may also fail while closing its pipe.
                 children.remove(child)
                 disable_microphone(f"麦克风采集退出（代码 {proc.returncode}）：" + "\n".join(tail)[-900:])
 
@@ -302,7 +305,10 @@ class Recorder(QObject):
                     (mic_errors if kind == "mic" else errors).append("采集关闭超时，片段可能不完整")
                 reader.join(timeout=1)
                 if proc.stdin:
-                    proc.stdin.close()
+                    try:
+                        proc.stdin.close()
+                    except OSError as error:
+                        mic_errors.append(f"麦克风输入已关闭：{error}")
                 if proc.returncode:
                     (mic_errors if kind == "mic" else errors).append("采集返回错误：" + "\n".join(tail)[-700:])
             children.clear()

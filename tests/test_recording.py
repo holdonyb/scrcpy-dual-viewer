@@ -345,7 +345,7 @@ class RecordingTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "win32", "Windows capture integration")
     def test_optional_microphone_failures_keep_two_devices_and_exports_running(self):
         original_spawn, original_run = subprocess.Popen, subprocess.run
-        for failure in ("missing", "launch", "opening", "midstream"):
+        for failure in ("missing", "launch", "opening", "midstream", "stop_error"):
             with self.subTest(failure=failure):
                 recorder = capture.Recorder()
                 self.recorders.append(recorder)
@@ -370,7 +370,24 @@ class RecordingTests(unittest.TestCase):
                             argv = [sys.executable, "-c", "import sys; print('Could not find audio only device with name [Synthetic microphone]', file=sys.stderr); sys.exit(-5)"]
                         else:
                             start, end = argv.index("-f"), argv.index("-vn")
-                            argv = argv[:start] + ["-re", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "0.6"] + argv[end:]
+                            duration = [] if failure == "stop_error" else ["-t", "0.6"]
+                            argv = argv[:start] + ["-re", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000"] + duration + argv[end:]
+                            if failure == "stop_error":
+                                proc = original_spawn(argv, **kwargs)
+                                stream = proc.stdin
+                                class BrokenPipeOnStop:
+                                    def write(self, data):
+                                        return stream.write(data)
+
+                                    def flush(self):
+                                        stream.flush()
+                                        raise BrokenPipeError("Synthetic microphone pipe interrupted")
+
+                                    def close(self):
+                                        stream.close()
+                                        raise BrokenPipeError("Synthetic microphone pipe closed")
+                                proc.stdin = BrokenPipeOnStop()
+                                return proc
                     return original_spawn(argv, **kwargs)
                 folder = self.base / failure
                 plan = {"folder": str(folder), "devices": [
@@ -381,7 +398,7 @@ class RecordingTests(unittest.TestCase):
                      patch.object(capture.subprocess, "run", side_effect=run), \
                      patch.object(capture, "list_microphones", return_value=available):
                     recorder.start(plan, m.default_config(), "SYNTHETIC_SCRCPY", "SYNTHETIC_ADB", FFMPEG, FFPROBE, ROOT / "dual_scrcpy_qt.py")
-                    self.assertTrue(wait_until(lambda: (warnings and recorder.state == "recording") or errors))
+                    self.assertTrue(wait_until(lambda: (recorder.state == "recording" and (warnings or failure == "stop_error")) or errors))
                     self.assertFalse(errors, errors)
                     self.assertTrue(recorder.busy)
                     self.assertEqual(recorder.state, "recording")
@@ -408,7 +425,7 @@ class RecordingTests(unittest.TestCase):
                 self.assertIn(warnings[0], results[0]["notes"])
                 public = json.loads((folder / "recording.json").read_text(encoding="utf-8"))
                 self.assertIn(warnings[0], public["notes"])
-                if failure == "midstream":
+                if failure in ("midstream", "stop_error"):
                     self.assertTrue(media_info(FFPROBE, plan["segments"][0]["mic"])["audio"])
                 else:
                     self.assertTrue(all("mic" not in s for s in plan["segments"]))
