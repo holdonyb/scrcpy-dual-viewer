@@ -12,7 +12,6 @@ suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"))
 result = unittest.TextTestRunner(verbosity=2).run(suite)
 from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication
-import shiboken6
 app = QApplication.instance()
 if app:
     app.closeAllWindows()
@@ -22,6 +21,8 @@ if app:
     print("Disposing test callbacks before QApplication", flush=True)
     gc.collect()
     app.sendPostedEvents(None, QEvent.DeferredDelete)
-    shiboken6.delete(app)
+    # PySide's shutdown disposes its remaining wrappers before the Qt singleton.
+    # Deleting the C++ QApplication directly can leave shared callback objects.
+    app.shutdown()
     print("QApplication disposed", flush=True)
 sys.exit(0 if result.wasSuccessful() else 1)
